@@ -3,4 +3,4 @@ Yen, Y., Weisbjerg, M.R., Abdelhafiz, Y., Le Moine Bauer, S., Viswanath, K., Nov
 
 This repository contains the R code to reproduce the microbiology analysis present in the article. 
 * [Rcode-microbiology.md](https://github.com/MeinzBeur/Yen-2022/blob/main/Rcode-microbiology.md) is the knitted output of the script.
-* [Rcode-microbiology.rmd](https://github.com/MeinzBeur/Yen-2022/blob/main/Rcode-microbiology.rmd) is the raw code of the script
+* [Rcode-microbiology.rmd](https://github.com/MeinzBeur/Yen-2022/blob/main/Rcode-microbiology.rmd) is the raw R markdown code of the script.
