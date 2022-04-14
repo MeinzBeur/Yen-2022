@@ -1,83 +1,47 @@
-Rcode-microbiology
-================
-Sven Le Moine Bauer
-2022-04-14
+---
+title: "Rcode-microbiology"
+author: "Sven Le Moine Bauer"
+date: '2022-04-14'
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
 ## Introduction
+This is the R code for the microbial analysis of described in **Feed characteristics and potential effects on ruminal bacteria of ensiled Saccharina latis-sima and Alaria esculenta for dairy cows** from Yen *et al.*, 2022. While we tried to make the code as clear as possible, we have no pretension of being highly skilled R coders, and it is likely that some sections could be rewritten in a more idiomatic manner. Any comments are welcome. The code covers the following parts:
 
-This is the R code for the microbial analysis of described in **Feed
-characteristics and potential effects on ruminal bacteria of ensiled
-Saccharina latis-sima and Alaria esculenta for dairy cows** from Yen *et
-al.*, 2022. While we tried to make the code as clear as possible, we
-have no pretension of being highly skilled R coders, and it is likely
-that some sections could be rewritten in a more idiomatic manner. Any
-comments are welcome. The code covers the following parts:
+* Preparation of the data
+* Barplots of the bacterial composition
+* Principal component analysis and associated statistical tests.
+* Rarefaction curves and Shannon diversity
+* Differential abundance analysis using ANCOM-BC and ALDEx2
+* Supplementary figures
 
--   Preparation of the data
--   Barplots of the bacterial composition
--   Principal component analysis and associated statistical tests.
--   Rarefaction curves and Shannon diversity
--   Differential abundance analysis using ANCOM-BC and ALDEx2
--   Supplementary figures
-
-The script is written so that the code of any section can be run once
-the “Preparation of the data” section has been run.
+The script is written so that the code of any section can be run once the "Preparation of the data" section has been run.
 
 ## Preparation of the data
+The data used here can be downloaded from the Github repository, and contains 3 files:
 
-The data used here can be downloaded from the Github repository, and
-contains 3 files:
+* "filtered_table.qza" is the OTU table produced through QIIME.
+* "taxonomy.qza" contains the taxonomic assignments to each OTU. Produced through QIIME.
+* The "ch2-sample-meta.tsv" file contains the metadata for each sample.
 
--   “filtered_table.qza” is the OTU table produced through QIIME.
--   “taxonomy.qza” contains the taxonomic assignments to each OTU.
-    Produced through QIIME.
--   The “ch2-sample-meta.tsv” file contains the metadata for each
-    sample.
-
-First we need load the libraries used here, and set up the working
-directory.
-
-``` r
+First we need load the libraries used here, and set up the working directory.
+```{r libraries}
 library(qiime2R) # to import QIIME output files into R
 library(phyloseq) # To be able to play with phyloseq objects
 library(plyr) # To use the ddply function
 library(ggplot2) # For plotting
 library(compositions) # For the clr transformation
-```
-
-    ## Welcome to compositions, a package for compositional data analysis.
-    ## Find an intro with "? compositions"
-
-    ## 
-    ## Attaching package: 'compositions'
-
-    ## The following objects are masked from 'package:stats':
-    ## 
-    ##     anova, cor, cov, dist, var
-
-    ## The following objects are masked from 'package:base':
-    ## 
-    ##     %*%, norm, scale, scale.default
-
-``` r
 library(vegan) # For PERMANOVA analysis
-```
-
-    ## Loading required package: permute
-
-    ## Loading required package: lattice
-
-    ## This is vegan 2.5-7
-
-``` r
 # Set the directory to the one the script is saved in
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) 
 ```
 
-And now let’s import the data. The code assumes that the files are in
-the same directory than the script.
-
-``` r
+And now let's import the data. The code assumes that the files are in the same directory than the script.
+```{r data}
 # Import the metadata to R
 metadata <- read.csv("ch2-sample-meta.tsv", row.names = 1, sep = "\t")
 # Make a phyloseq object out of the QIIME files
@@ -85,11 +49,8 @@ physeq1 <- qza_to_phyloseq(
   features = "filtered_table.qza",
   taxonomy = "taxonomy.qza")
 ```
-
-There is a certain amount of things that needs to be modified on these
-files before doing the analysis.
-
-``` r
+There is a certain amount of things that needs to be modified on these files before doing the analysis.
+```{r preparation}
 # It is generaly not advised to keep sample names as numbers, so let's add "S" in front
 otu <- as.data.frame(otu_table(physeq1)) # export the OTU table from phyloseq as data frame
 otu <- otu[,order(as.numeric(colnames(otu)))] # Order the samples
@@ -103,11 +64,6 @@ otu<- subset(otu, row.names(otu) %in% row.names(tax)) # Subset the OTU table too
 
 # While not mandatorily needed, it is also nicer to have proper OTU names rather than a nonsensical string.
 identical(rownames(otu), rownames(tax)) # Checks if the order is same in the otu and tax tables. Has to be true!
-```
-
-    ## [1] TRUE
-
-``` r
 OTU_list <- paste("OTU_", c(1:1865), sep="") # Makes a list of new names
 rownames(otu) <- OTU_list # Change the names to the otu table
 rownames(tax) <- OTU_list # Change the names to the tax table
@@ -142,11 +98,8 @@ rm(physeq1, OTU_list, i, class, family, genus, order, phylum, species)
 ```
 
 ## Barplots of the microbial composition
-
-This is the code leading to figure 2. First, we want to use relative
-abundance, so let’s convert the OTU table.
-
-``` r
+This is the code leading to figure 2. First, we want to use relative abundance, so let's convert the OTU table.
+```{r rel}
 # Change counts by relative abundance per sample
 otu_rel <- prop.table(as.matrix(otu), margin = 2)*100
 
@@ -156,30 +109,17 @@ TAX <- tax_table(as.matrix(tax))
 samples = sample_data(metadata)
 Phyloseq_rel <- phyloseq(OTU_REL, TAX, samples)
 ```
-
-A we want to have a barplot at the phylum level and another one at the
-genus level, we need to do some amalgams.
-
-``` r
+A we want to have a barplot at the phylum level and another one at the genus level, we need to do some amalgams.
+```{r gloms}
 Phyloseq_genus <- tax_glom(Phyloseq_rel, taxrank = "Genus")
 Phyloseq_phylum <- tax_glom(Phyloseq_rel, taxrank = "Phylum")
 ```
 
 ### Phylum barplot
+Now we are all set. Let's start with the barplot at the phylum level. When building a barplot, one needs to choose which taxa should be represented, and which ones should be pulled together in an "Other" category as they are less abundant in the communities. While this separation is arbitrary, it should balance the importance of information carried by the taxa and the readability of the plot. For our phylum barplot, we decided to pull together all phyla that are not present in more than 1% in at least 1 sample. That makes that 7 phyla remained, plus the "Other" group.
 
-Now we are all set. Let’s start with the barplot at the phylum level.
-When building a barplot, one needs to choose which taxa should be
-represented, and which ones should be pulled together in an “Other”
-category as they are less abundant in the communities. While this
-separation is arbitrary, it should balance the importance of information
-carried by the taxa and the readability of the plot. For our phylum
-barplot, we decided to pull together all phyla that are not present in
-more than 1% in at least 1 sample. That makes that 7 phyla remained,
-plus the “Other” group.
-
-Let’s start by pulling together the low abundance phyla.
-
-``` r
+Let's start by pulling together the low abundance phyla.
+```{r pull, warning=FALSE}
 # For that we need to get the phyloseq object into the long format, and make sure that phyla are strings.
 phylum_distribution <- psmelt(Phyloseq_phylum)
 phylum_distribution$Phylum <- as.character(phylum_distribution$Phylum)
@@ -189,10 +129,8 @@ phylum_others <- phylum_max[phylum_max$max < 1,]$Phylum # Get the list of phyla 
 phylum_others_OTU <- row.names(tax_table(Phyloseq_phylum))[apply(tax_table(Phyloseq_phylum), 1, function(u) any(u %in% phylum_others))] # What is the OTU name of these phyla?
 Phyloseq_phylum <- merge_taxa(Phyloseq_phylum, phylum_others_OTU) # Now we can pool these OTUs together inside the phyloseq object
 ```
-
 Now it still needs a bit of polishing to be able to plot the data
-
-``` r
+```{r preparation2, warning=FALSE}
 phylum_distribution <- psmelt(Phyloseq_phylum) # ggplot also needs data in the long format
 phylum_distribution$Phylum <- as.character(phylum_distribution$Phylum) # Makes sure that phyla are strings
 phylum_distribution$Phylum[is.na(phylum_distribution$Phylum)] <- "Others" # Gives the name "Others" to the pulled phyla
@@ -210,12 +148,8 @@ phylum_distribution$Phylum <- factor(phylum_distribution$Phylum, levels = order_
  # Make a color palette
 cols <- c("grey","hotpink","yellow","purple","powderblue","orange","green","steelblue")
 ```
-
-And finally, we can plot figure 2a! Note that some minor modification
-have been made to the code to fit the markdown output format (eg. the
-size variable)
-
-``` r
+And finally, we can plot figure 2a! Note that some minor modification have been made to the code to fit the markdown output format (eg. the size variable)
+```{r plot}
 ggplot(phylum_distribution, aes(x = Sample,
                                 y = Abundance, 
                                 fill = Phylum)) +
@@ -231,18 +165,11 @@ ggplot(phylum_distribution, aes(x = Sample,
         panel.border = element_blank()) + guides(fill=guide_legend(ncol = 1))
 ```
 
-![](Rcode-microbiology_files/figure-gfm/plot-1.png)<!-- -->
-
 ### Genus barplot
+The principle here is the same than for the phylum barplot, but this time we decided to pull together all genera that are not present in more than 1.6% in at least 1 sample. That makes that 19 genera kept, plus the "Other" group.
 
-The principle here is the same than for the phylum barplot, but this
-time we decided to pull together all genera that are not present in more
-than 1.6% in at least 1 sample. That makes that 19 genera kept, plus the
-“Other” group.
-
-Again, let’s start by pooling together the low abundance genera.
-
-``` r
+Again, let's start by pooling together the low abundance genera.
+```{r, warning=FALSE}
 genus_distribution <- psmelt(Phyloseq_genus)
 genus_distribution$Genus <- as.character(genus_distribution$Genus)
 genus_max <- ddply(genus_distribution, ~Genus, function(x) c(max=max(x$Abundance)))
@@ -250,10 +177,8 @@ genus_others <- genus_max[genus_max$max < 1.6,]$Genus
 genus_others_OTU <- row.names(tax_table(Phyloseq_genus))[apply(tax_table(Phyloseq_genus), 1, function(u) any(u %in% genus_others))]
 Phyloseq_genus <- merge_taxa(Phyloseq_genus, genus_others_OTU)
 ```
-
 The polishing part. Again, same as for the phylum plot.
-
-``` r
+```{r, warning=FALSE}
 genus_distribution <- psmelt(Phyloseq_genus)
 genus_distribution$Genus <- as.character(genus_distribution$Genus)
 genus_distribution$Genus[is.na(genus_distribution$Genus)] <- "Others"
@@ -267,10 +192,8 @@ colg<-c("lightgrey","salmon","yellow","powderblue","green","darkred","tomato","i
         "purple","orange","greenyellow","orangered","midnightblue","lightskyblue","slateblue",
         "yellowgreen", "seagreen","lightsalmon","lightseagreen","steelblue")
 ```
-
 And the plot! This is figure 2b.
-
-``` r
+```{r}
 ggplot(genus_distribution, aes(x = Sample,
                                y = Abundance, 
                                fill = Genus)) +
@@ -284,40 +207,26 @@ ggplot(genus_distribution, aes(x = Sample,
   theme(panel.grid = element_blank(),
         strip.background = element_blank(),
         panel.border = element_blank()) + guides(fill=guide_legend(ncol = 1))#Figure2B
+
 ```
 
-![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
-
-Let’s finish by cleaning the environment.
-
-``` r
+Let's finish by cleaning the environment.
+```{r}
 rm(genus_distribution, genus_max, genus_total, otu_rel, Phyloseq_genus, Phyloseq_phylum, Phyloseq_rel, phylum_distribution, phylum_max, phylum_total, colg, cols, genus_others, genus_others_OTU, order_barplot, OTU_REL, phylum_others, phylum_others_OTU, TAX, samples)
 ```
 
 ## PCA and associated statistical test
+Due to the compositional characteristics of sequencing data, we use the Aitchison distance for the PCA, i.e. the euclidian distance of clr transformed data.
 
-Due to the compositional characteristics of sequencing data, we use the
-Aitchison distance for the PCA, i.e. the euclidian distance of clr
-transformed data.
+The first thing to do here is to replace the 0s of the dataset. So let's look how many 0s they actually are.
 
-The first thing to do here is to replace the 0s of the dataset. So let’s
-look how many 0s they actually are.
-
-``` r
+```{r}
 vec = unlist(otu)
 mean(vec %in% "0") * 100
 ```
+75% of 0s. That is a lot, but not uncommon in microbial datasets. [Lubbe *et al.*, 2021](https://www.sciencedirect.com/science/article/pii/S0169743921000162) suggest that for very sparce data the best way to replace 0s is to add a pseudocount to each count. Most of the time 1 is used. So let's do that, and the clr transformation.
 
-    ## [1] 75.5496
-
-75% of 0s. That is a lot, but not uncommon in microbial datasets. [Lubbe
-*et al.*,
-2021](https://www.sciencedirect.com/science/article/pii/S0169743921000162)
-suggest that for very sparce data the best way to replace 0s is to add a
-pseudocount to each count. Most of the time 1 is used. So let’s do that,
-and the clr transformation.
-
-``` r
+```{r}
 otu_no0s <- otu + 1 # Adds one to each count
 otu_no0s_clr <- clr(otu_no0s) # Does the clr transformation
 
@@ -329,10 +238,8 @@ TAX = tax_table(taxtable)
 samples = sample_data(metadata)
 phylo_clr <- phyloseq(OTU, TAX, samples)
 ```
-
 And now we can get to the PCA plot, this is figure 3a.
-
-``` r
+```{r}
 # Run the PCA and scale the plot.
 PCA_clr <- ordinate(phylo_clr, method = "RDA", distance = "euclidian")
 clr1 <- PCA_clr$CA$eig[1] / sum(PCA_clr$CA$eig)
@@ -347,84 +254,30 @@ plot_ordination(phylo_clr, PCA_clr, color = "Species") +
         strip.background = element_blank())#Figure3A
 ```
 
-![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
-
-Now let’s see if the groups are statistically different using PERMANOVA
-analysis
-
-``` r
+Now let's see if the groups are statistically different using PERMANOVA analysis
+```{r}
 clr_dist_matrix <- distance(phylo_clr, method = "euclidean") # Make a distance matrix
 adonis(clr_dist_matrix ~ sample_data(phylo_clr)$Species) # Compute PERMANOVA
 ```
+Great, the p-value is at 0.001, so highly significant separation of the 3 groups. Nevertheless the test can be confounded by variation in dispertion of each group, so let's check that too.
 
-    ## 
-    ## Call:
-    ## adonis(formula = clr_dist_matrix ~ sample_data(phylo_clr)$Species) 
-    ## 
-    ## Permutation: free
-    ## Number of permutations: 999
-    ## 
-    ## Terms added sequentially (first to last)
-    ## 
-    ##                                Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)    
-    ## sample_data(phylo_clr)$Species  2     26044 13021.8  7.5766 0.41914  0.001 ***
-    ## Residuals                      21     36092  1718.7         0.58086           
-    ## Total                          23     62136                 1.00000           
-    ## ---
-    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
-Great, the p-value is at 0.001, so highly significant separation of the
-3 groups. Nevertheless the test can be confounded by variation in
-dispertion of each group, so let’s check that too.
-
-``` r
+```{r}
 dispr <- betadisper(clr_dist_matrix, sample_data(phylo_clr)$Species)
 permutest(dispr)
 ```
-
-    ## 
-    ## Permutation test for homogeneity of multivariate dispersions
-    ## Permutation: free
-    ## Number of permutations: 999
-    ## 
-    ## Response: Distances
-    ##           Df Sum Sq Mean Sq      F N.Perm Pr(>F)
-    ## Groups     2  92.77  46.387 1.2324    999  0.333
-    ## Residuals 21 790.45  37.641
-
 No significant difference here (p-value = 0.317), so we are good!
 
-Finally let’s plot the supplementary figure 1, and test for differences
-between treatments.
-
-``` r
+Finally let's plot the supplementary figure 1, and test for differences between treatments.
+```{r}
 plot_ordination(phylo_clr, PCA_clr, color = "Treatment") +   geom_point(size = 2) +
   coord_fixed(clr2 / clr1)
-```
-
-![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
-
-``` r
 clr_dist_matrix <- distance(phylo_clr, method = "euclidean")
 adonis(clr_dist_matrix ~ sample_data(phylo_clr)$Treatment)
 ```
-
-    ## 
-    ## Call:
-    ## adonis(formula = clr_dist_matrix ~ sample_data(phylo_clr)$Treatment) 
-    ## 
-    ## Permutation: free
-    ## Number of permutations: 999
-    ## 
-    ## Terms added sequentially (first to last)
-    ## 
-    ##                                  Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)
-    ## sample_data(phylo_clr)$Treatment  4     12830  3207.6  1.2361 0.20649  0.141
-    ## Residuals                        19     49305  2595.0         0.79351       
-    ## Total                            23     62136                 1.00000
-
 No significant difference this time (p-value = 0.133).
 
-``` r
+```{r}
 rm(dispr, otu_no0s, OTUtable, PCA_clr, phylo_clr, taxtable, clr_dist_matrix, clr1, clr2, OTU, otu_no0s_clr, TAX, vec, samples)
 ```
+
