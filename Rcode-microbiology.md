@@ -20,6 +20,9 @@ comments are welcome. The code covers the following parts:
 -   Differential abundance analysis using ANCOM-BC and ALDEx2
 -   Supplementary figures
 
+The script is written so that the code of any section can be run once
+the “Preparation of the data” section has been run.
+
 ## Preparation of the data
 
 The data used here can be downloaded from the Github repository, and
@@ -201,4 +204,56 @@ ggplot(phylum_distribution, aes(x = Sample,
         panel.border = element_blank()) + guides(fill=guide_legend(ncol = 1))
 ```
 
-![](Rcode-microbiology_files/figure-gfm/plot-1.png)<!-- -->
+![](Rcode-microbiology_files/figure-gfm/plot-1.png)<!-- --> \### Genus
+barplot The principle here is the same than for the phylum barplot, but
+this time we decided to pull together all genera that are not present in
+more than 1.6% in at least 1 sample. That makes that 19 genera kept,
+plus the “Other” group.
+
+Again, let’s start by pooling together the low abundance genera.
+
+``` r
+genus_distribution <- psmelt(Phyloseq_genus)
+genus_distribution$Genus <- as.character(genus_distribution$Genus)
+genus_max <- ddply(genus_distribution, ~Genus, function(x) c(max=max(x$Abundance)))
+genus_others <- genus_max[genus_max$max < 1.6,]$Genus
+genus_others_OTU <- row.names(tax_table(Phyloseq_genus))[apply(tax_table(Phyloseq_genus), 1, function(u) any(u %in% genus_others))]
+Phyloseq_genus <- merge_taxa(Phyloseq_genus, genus_others_OTU)
+```
+
+The polishing part. Again, same as for the phylum plot.
+
+``` r
+genus_distribution <- psmelt(Phyloseq_genus)
+genus_distribution$Genus <- as.character(genus_distribution$Genus)
+genus_distribution$Genus[is.na(genus_distribution$Genus)] <- "Others"
+genus_total <- (ddply(genus_distribution, ~Genus, function(x) c(sum=sum(x$Abundance))))
+genus_total <- genus_total[order(genus_total$sum),]
+order_barplot <- genus_total$Genus
+order_barplot <- c(order_barplot[16], order_barplot[1:15], order_barplot[17:20])
+genus_distribution$Sample <- factor(genus_distribution$Sample, levels = colnames(otu))
+genus_distribution$Genus <- factor(genus_distribution$Genus, levels = order_barplot)
+colg<-c("lightgrey","salmon","yellow","powderblue","green","darkred","tomato","indianred",
+        "purple","orange","greenyellow","orangered","midnightblue","lightskyblue","slateblue",
+        "yellowgreen", "seagreen","lightsalmon","lightseagreen","steelblue")
+```
+
+And the plot! This is figure 2b.
+
+``` r
+ggplot(genus_distribution, aes(x = Sample,
+                               y = Abundance, 
+                               fill = Genus)) +
+  geom_bar(stat="identity", colour = "black") +
+  labs(x = "", y = "Relative abundance")+ 
+  scale_fill_manual(values = colg)+
+  facet_grid(~factor(sample_Species, levels=c("Alaria-esculenta", "Saccharina-latissima","No-seaweed")), scales = 'free', space = 'free')+
+  theme_bw(base_size = 12)+
+  theme(axis.text.x = element_text(angle = 45, size = 8))+
+  theme(legend.position = "right", legend.text=element_text(size=10), legend.key.size = unit(0.5, 'cm'))+
+  theme(panel.grid = element_blank(),
+        strip.background = element_blank(),
+        panel.border = element_blank()) + guides(fill=guide_legend(ncol = 1))#Figure2B
+```
+
+![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
