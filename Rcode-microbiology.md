@@ -3,33 +3,47 @@ Rcode-microbiology
 Sven Le Moine Bauer
 2022-04-14
 
-## R Markdown
+## Introduction
 
-This is an R Markdown document. Markdown is a simple formatting syntax
-for authoring HTML, PDF, and MS Word documents. For more details on
-using R Markdown see <http://rmarkdown.rstudio.com>.
+This is the R code for the microbial analysis of described in **Feed
+characteristics and potential effects on ruminal bacteria of ensiled
+Saccharina latis-sima and Alaria esculenta for dairy cows** from Yen *et
+al.*, 2022. The code covers the following parts:
 
-When you click the **Knit** button a document will be generated that
-includes both content as well as the output of any embedded R code
-chunks within the document. You can embed an R code chunk like this:
+-   Preparation of the data
+-   Barplots of the bacterial composition
+-   Principal component analysis and associated statistical tests.
+-   Rarefaction curves and Shannon diversity
+-   Differential abundance analysis using ANCOM-BC and ALDEx2
+-   Supplementary figures
+
+## Preparation of the data
+
+The data used here can be downloaded from the Github repository, and
+contains 3 files:
+
+-   “filtered_table.qza” is the OTU table produced through QIIME.
+-   “taxonomy.qza” contains the taxonomic assignments to each OTU.
+    Produced through QIIME.
+-   The “ch2-sample-meta.tsv” file contains the metadata for each
+    sample.
+
+First we need load the libraries used here, and set up the working
+directory
 
 ``` r
-summary(cars)
+library(qiime2R) # to import QIIME output files into R
+
+
+
+# Set the directory to the one the script is saved in
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) 
 ```
 
-    ##      speed           dist       
-    ##  Min.   : 4.0   Min.   :  2.00  
-    ##  1st Qu.:12.0   1st Qu.: 26.00  
-    ##  Median :15.0   Median : 36.00  
-    ##  Mean   :15.4   Mean   : 42.98  
-    ##  3rd Qu.:19.0   3rd Qu.: 56.00  
-    ##  Max.   :25.0   Max.   :120.00
+And now let’s import the data:
 
-## Including Plots
-
-You can also embed plots, for example:
-
-![](Rcode-microbiology_files/figure-gfm/pressure-1.png)<!-- -->
-
-Note that the `echo = FALSE` parameter was added to the code chunk to
-prevent printing of the R code that generated the plot.
+``` r
+SVs <- read_qza(file="filtered_table.qza") 
+Tx <- read_qza(file="taxonomy.qza") 
+metadata <- read.csv("ch2-sample-meta.tsv", row.names = 1, sep = "\t")
+```
