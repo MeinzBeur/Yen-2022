@@ -42,7 +42,34 @@ library(qiime2R) # to import QIIME output files into R
 library(phyloseq) # To be able to play with phyloseq objects
 library(plyr) # To use the ddply function
 library(ggplot2) # For plotting
+library(compositions) # For the clr transformation
+```
 
+    ## Welcome to compositions, a package for compositional data analysis.
+    ## Find an intro with "? compositions"
+
+    ## 
+    ## Attaching package: 'compositions'
+
+    ## The following objects are masked from 'package:stats':
+    ## 
+    ##     anova, cor, cov, dist, var
+
+    ## The following objects are masked from 'package:base':
+    ## 
+    ##     %*%, norm, scale, scale.default
+
+``` r
+library(vegan) # For PERMANOVA analysis
+```
+
+    ## Loading required package: permute
+
+    ## Loading required package: lattice
+
+    ## This is vegan 2.5-7
+
+``` r
 # Set the directory to the one the script is saved in
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) 
 ```
@@ -204,11 +231,14 @@ ggplot(phylum_distribution, aes(x = Sample,
         panel.border = element_blank()) + guides(fill=guide_legend(ncol = 1))
 ```
 
-![](Rcode-microbiology_files/figure-gfm/plot-1.png)<!-- --> \### Genus
-barplot The principle here is the same than for the phylum barplot, but
-this time we decided to pull together all genera that are not present in
-more than 1.6% in at least 1 sample. That makes that 19 genera kept,
-plus the “Other” group.
+![](Rcode-microbiology_files/figure-gfm/plot-1.png)<!-- -->
+
+### Genus barplot
+
+The principle here is the same than for the phylum barplot, but this
+time we decided to pull together all genera that are not present in more
+than 1.6% in at least 1 sample. That makes that 19 genera kept, plus the
+“Other” group.
 
 Again, let’s start by pooling together the low abundance genera.
 
@@ -257,3 +287,144 @@ ggplot(genus_distribution, aes(x = Sample,
 ```
 
 ![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+
+Let’s finish by cleaning the environment.
+
+``` r
+rm(genus_distribution, genus_max, genus_total, otu_rel, Phyloseq_genus, Phyloseq_phylum, Phyloseq_rel, phylum_distribution, phylum_max, phylum_total, colg, cols, genus_others, genus_others_OTU, order_barplot, OTU_REL, phylum_others, phylum_others_OTU, TAX, samples)
+```
+
+## PCA ans associated statistical test
+
+Due to the compositional characteristics of sequencing data, we use the
+Aitchison distance for the PCA, i.e. the euclidian distance of clr
+transformed data.
+
+The first thing to do here is to replace the 0s of the dataset. So let’s
+look how many 0s they actually are.
+
+``` r
+vec = unlist(otu)
+mean(vec %in% "0") * 100
+```
+
+    ## [1] 75.5496
+
+75% of 0s. That is a lot, but not uncommon in microbial datasets. [Lubbe
+*et al.*,
+2021](https://www.sciencedirect.com/science/article/pii/S0169743921000162)
+suggest that for very sparce data the best way to replace 0s is to add a
+pseudocount to each count. Most of the time 1 is used. So let’s do that,
+and the clr transformation.
+
+``` r
+otu_no0s <- otu + 1 # Adds one to each count
+otu_no0s_clr <- clr(otu_no0s) # Does the clr transformation
+
+# And let's build a new phyloseq object with transformed data
+OTUtable <- as.matrix(otu_no0s_clr)
+taxtable <- as.matrix(tax)
+OTU = otu_table(OTUtable, taxa_are_rows = TRUE)
+TAX = tax_table(taxtable)
+samples = sample_data(metadata)
+phylo_clr <- phyloseq(OTU, TAX, samples)
+```
+
+And now we can get to the PCA plot, this is figure 3a.
+
+``` r
+# Run the PCA and scale the plot.
+PCA_clr <- ordinate(phylo_clr, method = "RDA", distance = "euclidian")
+clr1 <- PCA_clr$CA$eig[1] / sum(PCA_clr$CA$eig)
+clr2 <- PCA_clr$CA$eig[2] / sum(PCA_clr$CA$eig)
+
+plot_ordination(phylo_clr, PCA_clr, color = "Species") + 
+  geom_point(size = 4) +
+  scale_color_manual(values = c("moccasin", "indianred4", "orange4"))+
+  coord_fixed(clr2 / clr1)+
+  theme_bw(base_size = 10) +
+  theme(panel.grid = element_blank(),
+        strip.background = element_blank())#Figure3A
+```
+
+![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+Now let’s see if the groups ar statistically different using PERMANOVA
+analysis
+
+``` r
+clr_dist_matrix <- distance(phylo_clr, method = "euclidean") # Make a distance matrix
+adonis(clr_dist_matrix ~ sample_data(phylo_clr)$Species) # Compute PERMANOVA
+```
+
+    ## 
+    ## Call:
+    ## adonis(formula = clr_dist_matrix ~ sample_data(phylo_clr)$Species) 
+    ## 
+    ## Permutation: free
+    ## Number of permutations: 999
+    ## 
+    ## Terms added sequentially (first to last)
+    ## 
+    ##                                Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)    
+    ## sample_data(phylo_clr)$Species  2     26044 13021.8  7.5766 0.41914  0.001 ***
+    ## Residuals                      21     36092  1718.7         0.58086           
+    ## Total                          23     62136                 1.00000           
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Great, the p-value is at 0.001, so highly significant separation of the
+3 groups. Nevertheless the test can be confounded by variation in
+dispertion of each group, so let’s check that too.
+
+``` r
+dispr <- betadisper(clr_dist_matrix, sample_data(phylo_clr)$Species)
+permutest(dispr)
+```
+
+    ## 
+    ## Permutation test for homogeneity of multivariate dispersions
+    ## Permutation: free
+    ## Number of permutations: 999
+    ## 
+    ## Response: Distances
+    ##           Df Sum Sq Mean Sq      F N.Perm Pr(>F)
+    ## Groups     2  92.77  46.387 1.2324    999  0.293
+    ## Residuals 21 790.45  37.641
+
+No significant difference here (p-value = 0.317), so we are good!
+
+Finally let’s plot the supplementary figure 1, and test for differences
+between treatments.
+
+``` r
+plot_ordination(phylo_clr, PCA_clr, color = "Treatment") +   geom_point(size = 2) +
+  coord_fixed(clr2 / clr1)#SupplementaryFigure1.
+```
+
+![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
+``` r
+clr_dist_matrix <- distance(phylo_clr, method = "euclidean")
+adonis(clr_dist_matrix ~ sample_data(phylo_clr)$Treatment)
+```
+
+    ## 
+    ## Call:
+    ## adonis(formula = clr_dist_matrix ~ sample_data(phylo_clr)$Treatment) 
+    ## 
+    ## Permutation: free
+    ## Number of permutations: 999
+    ## 
+    ## Terms added sequentially (first to last)
+    ## 
+    ##                                  Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)
+    ## sample_data(phylo_clr)$Treatment  4     12830  3207.6  1.2361 0.20649  0.129
+    ## Residuals                        19     49305  2595.0         0.79351       
+    ## Total                            23     62136                 1.00000
+
+No siginificant difference this time (p-value = 0.133).
+
+``` r
+rm(dispr, otu_no0s, OTUtable, PCA_clr, phylo_clr, taxtable, clr_dist_matrix, clr1, clr2, OTU, otu_no0s_clr, TAX, vec, samples)
+```
