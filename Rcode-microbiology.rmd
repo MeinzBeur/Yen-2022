@@ -17,7 +17,6 @@ This is the R code for the microbial analysis of described in **Feed characteris
 * Principal component analysis and associated statistical tests.
 * Rarefaction curves and Shannon diversity
 * Differential abundance analysis using ANCOM-BC and ALDEx2
-* Supplementary figures
 
 The script is written so that the code of any section can be run once the "Preparation of the data" section has been run.
 

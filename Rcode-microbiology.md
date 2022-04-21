@@ -18,7 +18,6 @@ comments are welcome. The code covers the following parts:
 -   Principal component analysis and associated statistical tests.
 -   Rarefaction curves and Shannon diversity
 -   Differential abundance analysis using ANCOM-BC and ALDEx2
--   Supplementary figures
 
 The script is written so that the code of any section can be run once
 the “Preparation of the data” section has been run.
@@ -366,7 +365,7 @@ permutest(dispr)
     ## 
     ## Response: Distances
     ##           Df Sum Sq Mean Sq      F N.Perm Pr(>F)
-    ## Groups     2  92.77  46.387 1.2324    999  0.328
+    ## Groups     2  92.77  46.387 1.2324    999  0.317
     ## Residuals 21 790.45  37.641
 
 No significant difference here (p-value = 0.317), so we are good!
@@ -396,7 +395,7 @@ adonis(clr_dist_matrix ~ sample_data(phylo_clr)$Treatment)
     ## Terms added sequentially (first to last)
     ## 
     ##                                  Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)
-    ## sample_data(phylo_clr)$Treatment  4     12830  3207.6  1.2361 0.20649  0.124
+    ## sample_data(phylo_clr)$Treatment  4     12830  3207.6  1.2361 0.20649  0.151
     ## Residuals                        19     49305  2595.0         0.79351       
     ## Total                            23     62136                 1.00000
 
