@@ -43,33 +43,10 @@ library(phyloseq) # To be able to play with phyloseq objects
 library(plyr) # To use the ddply function
 library(ggplot2) # For plotting
 library(compositions) # For the clr transformation
-```
+library(vegan) # For PERMANOVA analysis and rarefaction curves.
+library(ANCOMBC)
+library(ALDEx2)
 
-    ## Welcome to compositions, a package for compositional data analysis.
-    ## Find an intro with "? compositions"
-
-    ## 
-    ## Attaching package: 'compositions'
-
-    ## The following objects are masked from 'package:stats':
-    ## 
-    ##     anova, cor, cov, dist, var
-
-    ## The following objects are masked from 'package:base':
-    ## 
-    ##     %*%, norm, scale, scale.default
-
-``` r
-library(vegan) # For PERMANOVA analysis
-```
-
-    ## Loading required package: permute
-
-    ## Loading required package: lattice
-
-    ## This is vegan 2.5-7
-
-``` r
 # Set the directory to the one the script is saved in
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) 
 ```
@@ -389,7 +366,7 @@ permutest(dispr)
     ## 
     ## Response: Distances
     ##           Df Sum Sq Mean Sq      F N.Perm Pr(>F)
-    ## Groups     2  92.77  46.387 1.2324    999  0.333
+    ## Groups     2  92.77  46.387 1.2324    999  0.318
     ## Residuals 21 790.45  37.641
 
 No significant difference here (p-value = 0.317), so we are good!
@@ -419,7 +396,7 @@ adonis(clr_dist_matrix ~ sample_data(phylo_clr)$Treatment)
     ## Terms added sequentially (first to last)
     ## 
     ##                                  Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)
-    ## sample_data(phylo_clr)$Treatment  4     12830  3207.6  1.2361 0.20649  0.141
+    ## sample_data(phylo_clr)$Treatment  4     12830  3207.6  1.2361 0.20649  0.138
     ## Residuals                        19     49305  2595.0         0.79351       
     ## Total                            23     62136                 1.00000
 
@@ -427,4 +404,167 @@ No significant difference this time (p-value = 0.133).
 
 ``` r
 rm(dispr, otu_no0s, OTUtable, PCA_clr, phylo_clr, taxtable, clr_dist_matrix, clr1, clr2, OTU, otu_no0s_clr, TAX, vec, samples)
+```
+
+## Rarefaction curves and Shannon diversity
+
+First, we drew the rarefaction curves to estimate the richness of the
+samples. This is supplementary figure 2.
+
+``` r
+# Start by making a phyloseq object
+OTU = otu_table(otu, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+samples = sample_data(metadata)
+phylo <- phyloseq(OTU, TAX, samples)
+
+# And plot the rarefaction curves using the vegan package.
+colours <- c(rep("Green", 10), rep("Blue", 10), rep("Orange", 4))
+rarecurve(t(otu_table(phylo)), step=50, cex=0.5, col = colours)
+```
+
+![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+And now let’s look at the Shannon diversity index to draw Figure 3B.
+
+``` r
+sample_data(phylo)$Species<-factor(sample_data(phylo)$Species, c("No-seaweed", "Alaria-esculenta", "Saccharina-latissima")) # Factorise and organise the order of the feeds.
+plot_richness(phylo, x="Species", measures= "Shannon") + geom_boxplot() + geom_boxplot(aes(fill=sample_data(phylo)$Species))+
+  scale_fill_manual(values = c("indianred4", "moccasin", "orange4"))+
+  theme_bw(base_size = 12) +
+  annotate("text", x = "No-seaweed", y = 5.6, label = "a", size = 5)+
+  annotate("text", x = "Alaria-esculenta", y = 3.8, label = "b", size = 5)+
+  annotate("text", x = "Saccharina-latissima", y = 2.8, label = "c", size = 5)+
+  labs(x = "", y = "Shannon - Alpha Diversity Measure")+
+  scale_x_discrete(labels = c("No seaweed IRF", "A. esculenta IRF", "S. latissima IRF"))+
+  theme(legend.title = element_blank())+
+  theme(panel.grid = element_blank(),
+        strip.background = element_blank())
+```
+
+![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+And the usual cleanup.
+
+``` r
+rm(phylo, samples, colours, OTU, TAX)
+```
+
+## Differential abundance analysis
+
+Differential abundance analysis (DAA) is a controversial topic (See
+[Quinn *et al.*, 2021](https://arxiv.org/abs/2104.07266v2)). While the
+rational of DAA applied to compositional data itself is debated, one
+other problem is that there are many DAA tools out there, with likely
+the same amount of potential results (See [Nearing *et al.*,
+2022](https://www.nature.com/articles/s41467-022-28034-z)). A way to
+cope with this last issue is to run several algorithms and cross the
+results. Here we used both ANCOM-BC and ALDEx2, which are 2 tools
+respecting the compositional properties of sequencing data. Also, as
+these tools look only at DA between 2 groups, we needed to run 3
+different analysis: Alaria-NoSeaweed, Saccharina-NoSeaweed, and
+Alaria-Saccharina. Here we show only the code for the Alraia-NoSeaweed
+DAA, but the same code can easily be adapted for the 2 other analyses.
+
+First of all it is advised to run such analysis only on the most
+prevalent OTUs to have robust results. Here we will run the analysis a
+the genus level, and select only the top 50 genera.
+
+``` r
+# Start by making a phyloseq object, and amalgaming at the genus level.
+OTU = otu_table(otu, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+samples = sample_data(metadata)
+phylo <- phyloseq(OTU, TAX, samples)
+Phylo_genus <- tax_glom(phylo, taxrank = "Genus")
+
+# Now let's take the 50 most abundant genera.
+otu_rel <- prop.table(as.matrix(otu_table(Phylo_genus)), margin = 2)*100
+otu_rel <- otu_rel[order(-rowMeans(otu_rel)),]
+otu_tokeep <- rownames(otu_rel[c(1:50),])
+Phylo_genus_50 <- prune_taxa(otu_tokeep, Phylo_genus)
+```
+
+Let’s start witht the ANCOM-BC analysis. While we kept some of the
+default parameters, we also changed a couple of other ones. The “BH”
+method was used for p_adjust as a more stringent way to avoid false
+positives. zero_cut was set to 1 to not exclude any taxa from the
+analysis. struc_zero was set to 1 to detect structural zeros, and
+conserve was set to TRUE as advised when there are groups with small
+amount of samples (like our No seaweed group).
+
+``` r
+# First let's factorise the feeds (species) so that No-seaweed is used as the base group.
+sample_data(Phylo_genus_50)$Species <- factor(sample_data(Phylo_genus_50)$Species,
+                                          levels = c("No-seaweed","Alaria-esculenta","Saccharina-latissima")) 
+# And then run ANCOM-BC
+out <- ANCOMBC::ancombc(phyloseq = Phylo_genus_50,
+                        formula = "Species", p_adj_method = "BH", zero_cut = 1, group = "Species", struc_zero = TRUE, 
+                        conserve = TRUE) 
+
+#And extract the log2foldchange of the significantly differentialy abundant genera.
+res <- as.data.frame(out$res$diff_abn)
+res <- subset(res, `SpeciesAlaria-esculenta`== TRUE)
+res_value <- as.data.frame(out$res$beta)
+res_value <- subset(res_value, rownames(res_value) %in% rownames(res))
+```
+
+Now let’s run the ALDEx2 analysis. This one is not run on the phyloseq
+object, but directly on the OTU table.
+
+``` r
+Aldotu <- as.data.frame(otu_table(Phylo_genus_50)) # Get out of phyloseq
+Aldotu.sub <- Aldotu [,c(21:24, 1:10)] # Select only the relevant samples.
+conds <- c(rep("NS", 4),rep("S", 10) ) # Creat a vector to assign each sample to the Non Seaweed or Seaweed group.
+
+# Run ALDEx2
+x.all.NA <- aldex(Aldotu.sub, conds, mc.samples=128, test='t',
+                  effect=TRUE, include.sample.summary=FALSE, denom="all", verbose=FALSE) 
+#Select genera with an effect <-1 or >1
+x.NA <- dplyr::filter(x.all.NA, effect >1 | effect < -1)
+```
+
+And now that we have the results of the 2 different DAA we can select
+genera that are only selected by both.
+
+``` r
+Merged <- merge(res_value, x.NA, by = 0, all = TRUE) # Combine both DAA results
+rownames(Merged) <- Merged$Row.names # Give good row names again
+Merged <- merge(Merged, as.data.frame(tax_table(Phylo_genus_50)), by = 0, all.y = FALSE) # Add taxonomy
+rownames(Merged) <- Merged$Row.names # Give good row names again
+Merged <- Merged[, c(3,10, 17,21)] # Select only the columns we need
+Merged <- Merged[complete.cases(Merged),] # Select only the genera selected by both approaches
+```
+
+And finally get to the plot figure 4.
+
+``` r
+# Make the palette for the phyla
+length(unique(Merged$Phylum)) # How many unique phyla in the table?
+```
+
+    ## [1] 3
+
+``` r
+pcolor <- c("steelblue","hotpink","orange") # Make palette with the needed amount of colours
+
+# Sort the genera according to the log2foldchange.
+Merged<-Merged[order(Merged$`SpeciesAlaria-esculenta`),]
+
+
+ggplot(Merged, aes(x = reorder(Genus, `SpeciesAlaria-esculenta`), y = `SpeciesAlaria-esculenta`, fill = Phylum))+
+  geom_point(shape = 23, size = 3)+
+  theme_bw(base_size = 15)+
+  scale_fill_manual(values = pcolor)+
+  theme(axis.title = element_text(face = "bold"))+
+  theme(legend.title = element_text(face = "bold"))+
+  labs(y = "Log2 fold change (A. esculenta vs No-seaweed)") +
+  coord_flip()
+```
+
+![](Rcode-microbiology_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
+Final cleanup
+
+``` r
+rm(Aldotu, Aldotu.sub, Merged, otu_rel, out, phylo, Phylo_genus, Phylo_genus_50, res, res_value, x.all.NA, x.NA, conds, OTU, otu_tokeep, pcolor, TAX, samples)
 ```
