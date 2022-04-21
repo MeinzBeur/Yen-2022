@@ -366,7 +366,7 @@ permutest(dispr)
     ## 
     ## Response: Distances
     ##           Df Sum Sq Mean Sq      F N.Perm Pr(>F)
-    ## Groups     2  92.77  46.387 1.2324    999  0.318
+    ## Groups     2  92.77  46.387 1.2324    999  0.328
     ## Residuals 21 790.45  37.641
 
 No significant difference here (p-value = 0.317), so we are good!
@@ -396,7 +396,7 @@ adonis(clr_dist_matrix ~ sample_data(phylo_clr)$Treatment)
     ## Terms added sequentially (first to last)
     ## 
     ##                                  Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)
-    ## sample_data(phylo_clr)$Treatment  4     12830  3207.6  1.2361 0.20649  0.138
+    ## sample_data(phylo_clr)$Treatment  4     12830  3207.6  1.2361 0.20649  0.124
     ## Residuals                        19     49305  2595.0         0.79351       
     ## Total                            23     62136                 1.00000
 
