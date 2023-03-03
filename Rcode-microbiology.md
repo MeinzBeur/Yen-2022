@@ -399,7 +399,7 @@ adonis(clr_dist_matrix ~ sample_data(phylo_clr)$Treatment)
     ## Residuals                        19     49305  2595.0         0.79351       
     ## Total                            23     62136                 1.00000
 
-No significant difference this time (p-value = 0.133).
+No significant difference this time (p-value = 0.151).
 
 ``` r
 rm(dispr, otu_no0s, OTUtable, PCA_clr, phylo_clr, taxtable, clr_dist_matrix, clr1, clr2, OTU, otu_no0s_clr, TAX, vec, samples)
